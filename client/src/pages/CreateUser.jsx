@@ -1,207 +1,160 @@
-import { Alert, Button, FileInput, Select, TextInput } from "flowbite-react";
+import { Alert, Button, Select, TextInput } from "flowbite-react";
 import React, { useState, useEffect } from "react";
-import ReactQuill from "react-quill";
-import { getDownloadURL, getStorage, ref, uploadBytesResumable } from "firebase/storage";
-import { app } from "../firebase";
-import { CircularProgressbar } from "react-circular-progressbar";
-import "react-circular-progressbar/dist/styles.css";
+import { useNavigate } from "react-router-dom";
 
 const CreateUser = () => {
-  const [file, setFile] = useState(null);
-  const [imageUploadProgress, setImageUploadProgress] = useState(null);
-  const [imageUploadError, setImageUploadError] = useState(null);
-  const [formData, setFormData] = useState({});
+  const [formData, setFormData] = useState({
+    nama: "",
+    username: "",
+    password: "",
+    noHp: "",
+    alamat: "",
+    email: "",
+    tanggalLahir: "",
+    akses: { id: "" },
+  });
+
+  const [aksesOptions, setAksesOptions] = useState([]);
   const [publishError, setPublishError] = useState(null);
-  const [role, setRole] = useState("user");
-  const [lembagaOptions, setLembagaOptions] = useState([]);
-  const [selectedLembaga, setSelectedLembaga] = useState("");
   const [successMessage, setSuccessMessage] = useState(null);
+  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
 
+  // Ambil token di awal (agar tidak sering dipanggil)
+  const token = localStorage.getItem("token")?.trim(); // Pakai trim() biar tidak ada spasi tambahan
+
+  // Fetch daftar akses dari API
   useEffect(() => {
-    const fetchLembagaOptions = async () => {
-      try {
-        const response = await fetch("/api/organization/getorganizations");
-        const data = await response.json();
+    const fetchAksesOptions = async () => {
+      if (!token) {
+        console.error("Token tidak ditemukan. Pengguna belum login.");
+        setPublishError("Akses ditolak, silakan login terlebih dahulu.");
+        return;
+      }
 
-        if (Array.isArray(data.organizations)) {
-          setLembagaOptions(
-            data.organizations.map((lembaga) => ({
-              id: lembaga._id,
-              name: lembaga.namaLembaga,
+      try {
+        const response = await fetch(`${API_BASE_URL}/akses`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          console.error("Gagal mengambil data akses:", result);
+          setPublishError(result.message || "Gagal mengambil daftar akses.");
+          return;
+        }
+
+        // Pastikan `content` ada dan berbentuk array sebelum mapping
+        if (result.data?.content && Array.isArray(result.data.content)) {
+          setAksesOptions(
+            result.data.content.map((akses) => ({
+              id: akses.id,
+              name: akses.nama, // Pakai `nama`, bukan `namaAkses`
             }))
           );
         } else {
-          console.error("Data returned is not an array", data);
-          setLembagaOptions([]);
+          console.error("Format data akses tidak sesuai", result);
+          setAksesOptions([]);
         }
       } catch (error) {
-        console.error("Failed to fetch lembaga data", error);
+        console.error("Gagal mengambil data akses:", error);
+        setPublishError("Gagal mengambil daftar akses.");
       }
     };
-    fetchLembagaOptions();
-  }, []);
 
-  const handleUploadImage = async () => {
-    try {
-      if (!file) {
-        setImageUploadError("Please select an image");
-        return;
-      }
-      setImageUploadError(null);
-      const storage = getStorage(app);
-      const fileName = new Date().getTime() + "-" + file.name;
-      const storageRef = ref(storage, fileName);
-      const uploadTask = uploadBytesResumable(storageRef, file);
-      uploadTask.on(
-        "state_changed",
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          setImageUploadProgress(progress.toFixed(0));
-        },
-        (error) => {
-          setImageUploadError("Image upload failed");
-          setImageUploadProgress(null);
-        },
-        () => {
-          getDownloadURL(uploadTask.snapshot.ref).then((downloadUrl) => {
-            setImageUploadProgress(null);
-            setImageUploadError(null);
-            setFormData((prev) => ({ ...prev, profilePicture: downloadUrl }));
-          });
-        }
-      );
-    } catch (error) {
-      setImageUploadError("Image Upload failed");
-      setImageUploadProgress(null);
-      console.log(error);
-    }
-  };
+    fetchAksesOptions();
+  }, [token]); // Jalankan hanya jika token tersedia
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const token = localStorage.getItem("token")?.trim();
+    // console.log("Token sebelum request:", token);
+
+    if (!token) {
+      setPublishError("Anda harus login terlebih dahulu.");
+      return;
+    }
+
     try {
-      const res = await fetch("/api/user/create", {
+      const res = await fetch(`${API_BASE_URL}/users`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ ...formData, role, lembaga: selectedLembaga }),
+        credentials: "include",
+        body: JSON.stringify({
+          ...formData,
+          akses: { id: Number(formData.akses.id) },
+        }),
       });
+
       const data = await res.json();
+      // console.log("Response dari server:", res.status, data); // Debug response status & data
+
       if (!res.ok) {
-        setPublishError(data.message);
+        console.log("Response API Error:", data); // Debugging
+        setPublishError(data?.message || `Gagal membuat user (Status ${res.status})`);
         return;
       }
-      if (res.ok) {
-        setPublishError(null);
-        setSuccessMessage("User successfully created!");
 
-        // Mengosongkan input form setelah berhasil
-        setFormData({});
-        setFile(null);
-        setSelectedLembaga("");
-        setRole("user");
-
-        // Memuat ulang halaman setelah user berhasil dibuat
-        setTimeout(() => {
-          window.location.reload();
-        }, 2000); // Menunggu 2 detik untuk memberikan waktu menampilkan pesan sukses
-      }
+      // console.log("Response API Berhasil:", data); // Debugging
+      setSuccessMessage(data?.message || "User berhasil dibuat!");
     } catch (error) {
-      setPublishError("Something went wrong");
+      console.error("Error saat mengirim data user:", error);
+      setPublishError("Terjadi kesalahan saat membuat user.");
     }
   };
 
   return (
-    <div className="p-3 mx-auto mb-4">
+    <div className="  mx-auto p-5">
       <h1 className="text-center text-3xl my-7 font-semibold">Create User</h1>
-      <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-        {/* Input Username */}
-        <div className="space-y-4">
-          <div className="flex flex-col gap-2 sm:flex-row justify-between items-center">
-            <label className="font-bold w-full sm:w-1/4 text-left">Username</label>
-            <label className="font-bold hidden sm:block">: </label>
-            <TextInput type="text" placeholder="Username" required className="flex-1 w-full" value={formData.username || ""} onChange={(e) => setFormData((prev) => ({ ...prev, username: e.target.value }))} />
-          </div>
-
-          {/* Input Email */}
-          <div className="flex flex-col gap-2 sm:flex-row justify-between items-center">
-            <label className="font-bold w-full sm:w-1/4 text-left">Email</label>
-            <label className="font-bold hidden sm:block">: </label>
-            <TextInput type="email" placeholder="Email" required className="flex-1 w-full" value={formData.email || ""} onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))} />
-          </div>
-
-          {/* Input Password */}
-          <div className="flex flex-col gap-2 sm:flex-row justify-between items-center">
-            <label className="font-bold w-full sm:w-1/4 text-left">Password</label>
-            <label className="font-bold hidden sm:block">: </label>
-            <TextInput type="text" placeholder="********" required className="flex-1 w-full" value={formData.password || ""} onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))} />
-          </div>
-
-          {/* Select Role */}
-          <div className="flex flex-col gap-2 sm:flex-row justify-between items-center">
-            <label className="font-bold w-full sm:w-1/4 text-left">Role</label>
-            <label className="font-bold hidden sm:block">: </label>
-            <Select
-              value={role}
-              onChange={(e) => {
-                const newRole = e.target.value;
-                setRole(newRole);
-                setFormData((prev) => ({ ...prev, role: newRole }));
-                if (newRole !== "pengurus") {
-                  setSelectedLembaga(""); // Clear lembaga if not pengurus
-                }
-              }}
-              className="flex-1 w-full"
-            >
-              <option value="user">User</option>
-              <option value="pengurus">Pengurus</option>
-            </Select>
-          </div>
-
-          {/* Input Lembaga */}
-          {role === "pengurus" && (
-            <div className="flex flex-col gap-2 sm:flex-row justify-between items-center">
-              <label className="font-bold w-full sm:w-1/4 text-left">Lembaga</label>
-              <label className="font-bold hidden sm:block">: </label>
-              <Select value={selectedLembaga} onChange={(e) => setSelectedLembaga(e.target.value)} className="flex-1 w-full">
-                <option value="">Select Lembaga</option>
-                {lembagaOptions.map((lembaga) => (
-                  <option key={lembaga.id} value={lembaga.id}>
-                    {lembaga.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
+      <form className="flex  flex-wrap  gap-6 justify-center" onSubmit={handleSubmit}>
+        <div className="flex flex-col gap-4 w-64">
+          <TextInput type="text" placeholder="Nama Lengkap" required value={formData.nama} onChange={(e) => setFormData({ ...formData, nama: e.target.value })} />
+          <TextInput type="text" placeholder="Username" required value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value })} />
+          <TextInput type="password" placeholder="Password" required value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} />
+          <TextInput type="text" placeholder="Nomor HP" required value={formData.noHp} onChange={(e) => setFormData({ ...formData, noHp: e.target.value })} />
         </div>
 
-        {/* File Upload */}
-        <div className="flex flex-col gap-4 sm:flex-row items-center justify-between border-4 border-teal-500 border-dotted p-3">
-          <FileInput type="file" accept="image/*" className="w-full sm:w-auto" onChange={(e) => setFile(e.target.files[0])} />
-          <Button type="button" gradientDuoTone="tealToLime" size="sm" outline onClick={handleUploadImage} disabled={imageUploadProgress}>
-            {imageUploadProgress ? (
-              <div className="w-16 h-16">
-                <CircularProgressbar value={imageUploadProgress} text={`${imageUploadProgress || 0}%`} />
-              </div>
-            ) : (
-              "Upload Profile Picture"
-            )}
-          </Button>
-        </div>
-        {imageUploadError && <Alert color="failure">{imageUploadError}</Alert>}
-        {formData.profilePicture && <img src={formData.profilePicture} className="w-28 h-28 mx-auto" alt="Uploaded" />}
+        <div className="flex flex-col gap-4 w-64">
+          <TextInput type="text" placeholder="Alamat" required value={formData.alamat} onChange={(e) => setFormData({ ...formData, alamat: e.target.value })} />
+          <TextInput type="email" placeholder="Email" required value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+          <TextInput type="date" required value={formData.tanggalLahir} onChange={(e) => setFormData({ ...formData, tanggalLahir: e.target.value })} />
 
-        {/* Submit Button */}
-        <div className="flex justify-center my-6">
-          <Button type="submit" gradientDuoTone="tealToLime" outline>
+          <Select
+            value={formData.akses.id}
+            onChange={(e) => {
+              const selectedId = Number(e.target.value); // Convert ke number
+              setFormData((prev) => ({
+                ...prev,
+                akses: { id: selectedId || null }, // Pastikan tidak mengirim 0
+              }));
+            }}
+          >
+            <option value="">Pilih Akses</option>
+            {aksesOptions.map((akses) => (
+              <option key={akses.id} value={akses.id}>
+                {akses.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        {/* Tombol Submit */}
+        <div className="w-full flex justify-center mt-2 mb-2">
+          <Button type="submit" gradientDuoTone="tealToLime" outline className="w-64">
             Create User
           </Button>
         </div>
-
-        {publishError && <Alert color="failure">{publishError}</Alert>}
-        {successMessage && <Alert color="success">{successMessage}</Alert>}
       </form>
+
+      {publishError && <Alert color="failure">{publishError}</Alert>}
+      {successMessage && <Alert color="success">{successMessage}</Alert>}
     </div>
   );
 };

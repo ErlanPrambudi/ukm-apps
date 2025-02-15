@@ -15,6 +15,7 @@ export default function Header() {
   const { currentUser } = useSelector((state) => state.user);
   const { theme } = useSelector((state) => state.theme);
   const [searchTerm, setSearchTerm] = useState("");
+  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
 
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);
@@ -23,22 +24,6 @@ export default function Header() {
       setSearchTerm(searchTermFromUrl);
     }
   }, [location.search]);
-
-  const handleSignout = async () => {
-    try {
-      const res = await fetch("/api/user/signout", {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        console.log(data.message);
-      } else {
-        dispatch(signoutSuccess());
-      }
-    } catch (error) {
-      console.log(error.message);
-    }
-  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -52,7 +37,7 @@ export default function Header() {
     <Navbar className="border-b-2">
       <div className="mt-5">
         <Link to="/" className="self-center whitespace-nowrap text-lg sm:text-xl font-semibold dark:text-white">
-          <span className="px-2 pt-2 py-1 bg-gradient-to-r from-teal-600 via-lime-500 to-lime-400 rounded-lg text-white">HIMA UTDI</span>
+          <span className="px-2 pt-2 py-1 bg-gradient-to-r from-teal-600 via-lime-500 to-lime-400 rounded-lg text-white">Biliosphere</span>
         </Link>
       </div>
       <form onSubmit={handleSubmit}>
@@ -72,10 +57,9 @@ export default function Header() {
               <span className="block text-sm font-medium truncate">{currentUser.email}</span>
             </Dropdown.Header>
             <Link to={"/dashboard?tab=profile"}>
-              <Dropdown.Item>{currentUser.role === "user" ? "Profile" : currentUser.role === "admin" ? "Dashboard Admin" : "Dashboard Pengurus"}</Dropdown.Item>
+              <Dropdown.Item>Dashboard</Dropdown.Item>
             </Link>
             <Dropdown.Divider />
-            <Dropdown.Item onClick={handleSignout}>Sign out</Dropdown.Item>
           </Dropdown>
         ) : (
           <Link to="/sign-in">
@@ -91,10 +75,10 @@ export default function Header() {
           <Link to="/">Home</Link>
         </Navbar.Link>
         <Navbar.Link active={path === "/about"} as={"div"}>
-          <Link to="/about">About</Link>
+          <Link to="/about">-</Link>
         </Navbar.Link>
         <Navbar.Link active={path === "/organization"} as={"div"}>
-          <Link to="/organization">Organization</Link>
+          <Link to="/organization">-</Link>
         </Navbar.Link>
       </Navbar.Collapse>
     </Navbar>

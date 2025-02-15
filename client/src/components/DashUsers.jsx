@@ -1,149 +1,135 @@
-import { Modal, Table, Button } from "flowbite-react";
+import { Table, Modal, Button } from "flowbite-react";
 import { useEffect, useState } from "react";
-import { useSelector } from "react-redux";
-import { FaCheck, FaTimes } from "react-icons/fa";
-import { HiOutlineExclamationCircle } from "react-icons/hi";
-import CreateUser from "../pages/CreateUser";
-import { Link } from "react-router-dom";
+import { FiTrash, FiEdit } from "react-icons/fi";
+import { useNavigate } from "react-router-dom"; // Import useNavigate
 
 const DashUsers = () => {
-  const { currentUser } = useSelector((state) => state.user);
   const [users, setUsers] = useState([]);
-  const [showMore, setShowMore] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [userIdToDelete, setUserIdToDelete] = useState("");
+  const [userIdToDelete, setUserIdToDelete] = useState(null);
+  const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const res = await fetch(`/api/user/getusers`);
-        const data = await res.json();
-        console.log(data);
-        if (res.ok) {
-          setUsers(data.users);
-          if (data.users.length < 9) {
-            setShowMore(false);
-          }
-        }
-      } catch (error) {
-        console.log(error);
-      }
-    };
-    if (currentUser.isAdmin) {
-      fetchUsers();
-    }
-  }, [currentUser._id]);
+    fetchUsers();
+  }, []);
 
-  const handleShowMore = async () => {
-    const startIndex = users.length;
+  const fetchUsers = async () => {
     try {
-      const res = await fetch(`/api/user/getusers?startIndex=${startIndex}`);
-      const data = await res.json();
-      if (res.ok) {
-        setUsers((prev) => [...prev, ...data.users]);
-        if (data.users.length < 9) {
-          setShowMore(false);
-        }
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_BASE_URL}/users`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP error! Status: ${res.status}`);
+      }
+
+      const json = await res.json();
+
+      if (json.data && Array.isArray(json.data.content)) {
+        setUsers(json.data.content);
+      } else {
+        setUsers([]);
       }
     } catch (error) {
-      console.log(error);
+      console.error("Error fetching users:", error);
     }
   };
 
-  const handleDeleteUser = async () => {
+  const handleDelete = async () => {
+    if (!userIdToDelete) return;
     try {
-      const res = await fetch(`/api/user/delete/${userIdToDelete}`, {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_BASE_URL}/users/${userIdToDelete}`, {
         method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token ? `Bearer ${token}` : "",
+        },
       });
-      const data = await res.json();
-      if (res.ok) {
-        setUsers((prev) => prev.filter((user) => user._id !== userIdToDelete));
-        setShowModal(false);
+
+      if (!res.ok) {
+        throw new Error(`Gagal menghapus pengguna! Status: ${res.status}`);
       }
-      console.log(data.message);
+
+      setShowModal(false);
+      fetchUsers(); // Refresh data setelah menghapus
     } catch (error) {
-      console.log(error);
+      console.error("Error deleting user:", error);
+      alert("Terjadi kesalahan saat menghapus pengguna.");
     }
   };
 
   return (
-    <div className="table-auto overflow-x-auto md:mx-auto p-3">
-      <CreateUser />
-      <div className="table-auto overflow-x-scroll md:mx-auto p-3 scrollbar scrollbar-track-slate-100 scrollbar-thumb-slate-300 dark:scrollbar-track-slate-700 dark:scrollbar-thumb-slate-500 ">
-        {currentUser.isAdmin && users.length > 0 ? (
-          <>
-            <Table hoverable className="shadow-md">
-              <Table.Head>
-                <Table.HeadCell>Date Created</Table.HeadCell>
-                <Table.HeadCell>User image</Table.HeadCell>
-                <Table.HeadCell>Username</Table.HeadCell>
-                <Table.HeadCell>Email</Table.HeadCell>
-                <Table.HeadCell>Admin</Table.HeadCell>
-                <Table.HeadCell>Role</Table.HeadCell>
-                <Table.HeadCell>Lembaga</Table.HeadCell>
-                <Table.HeadCell>Delete</Table.HeadCell>
-                <Table.HeadCell>Update</Table.HeadCell>
-              </Table.Head>
-              {users.map((user) => (
-                <Table.Body className="divide-y" key={user._id}>
-                  <Table.Row className=" bg-white dark:border-gray-700 dark:bg-gray-800">
-                    <Table.Cell>{new Date(user.createdAt).toLocaleDateString()}</Table.Cell>
-                    <Table.Cell>
-                      <img src={user.profilePicture} alt={user.username} className="w-10 h-10 object-cover bg-gray-500 rounded-full" />
-                    </Table.Cell>
-                    <Table.Cell>{user.username}</Table.Cell>
-                    <Table.Cell>{user.email}</Table.Cell>
-                    <Table.Cell>{user.isAdmin ? <FaCheck className="text-green-500" /> : <FaTimes className="text-red-500" />}</Table.Cell>
+    <div className="p-4 overflow-x-auto">
+      <h2 className="text-xl font-semibold mb-4">Daftar Pengguna</h2>
+      {users.length > 0 ? (
+        <Table hoverable className="shadow-md">
+          <Table.Head>
+            <Table.HeadCell className="p-2">Nama</Table.HeadCell>
+            <Table.HeadCell className="p-2">Username</Table.HeadCell>
+            <Table.HeadCell className="p-2">Email</Table.HeadCell>
+            <Table.HeadCell className="p-2">Alamat</Table.HeadCell>
+            <Table.HeadCell className="p-2">No HP</Table.HeadCell>
+            <Table.HeadCell className="p-2">Nama Akses</Table.HeadCell>
+            <Table.HeadCell className="p-2">Tanggal Lahir</Table.HeadCell>
+            <Table.HeadCell className="p-2">Delete</Table.HeadCell>
+            <Table.HeadCell className="p-2">Update</Table.HeadCell>
+          </Table.Head>
+          <Table.Body className="divide-y">
+            {users.map((user) => (
+              <Table.Row key={user.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
+                <Table.Cell className="p-2">{user.nama}</Table.Cell>
+                <Table.Cell className="p-2">{user.username}</Table.Cell>
+                <Table.Cell className="p-2 max-w-[150px] truncate">{user.email}</Table.Cell>
+                <Table.Cell className="p-2">{user.alamat}</Table.Cell>
+                <Table.Cell className="p-2">{user.noHp}</Table.Cell>
+                <Table.Cell className="p-2">{user.namaAkses}</Table.Cell>
+                <Table.Cell className="p-2">{user.tanggalLahir ? user.tanggalLahir : "N/A"}</Table.Cell>
+                <Table.Cell className="p-2">
+                  <span
+                    onClick={() => {
+                      setShowModal(true);
+                      setUserIdToDelete(user.id);
+                    }}
+                    className="font-md text-red-500 hover:underline cursor-pointer"
+                  >
+                    <FiTrash size={18} />
+                  </span>
+                </Table.Cell>
+                <Table.Cell>
+                  <button onClick={() => navigate(`/update-user/${user.id}`)} className="text-blue-500 hover:text-blue-700">
+                    <FiEdit size={18} />
+                  </button>
+                </Table.Cell>
+              </Table.Row>
+            ))}
+          </Table.Body>
+        </Table>
+      ) : (
+        <p className="text-gray-500">Tidak ada pengguna ditemukan.</p>
+      )}
 
-                    <Table.Cell>{user.role}</Table.Cell>
-                    <Table.Cell>{user.lembaga?.namaLembaga}</Table.Cell>
-                    <Table.Cell>
-                      <span
-                        onClick={() => {
-                          setShowModal(true);
-                          setUserIdToDelete(user._id);
-                        }}
-                        className="font-md text-red-500 hover:underline cursor-pointer"
-                      >
-                        Delete
-                      </span>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Link className="text-teal-500 hover:underline" to={`/update-user/${user._id}`}>
-                        <span>Edit</span>
-                      </Link>
-                    </Table.Cell>
-                  </Table.Row>
-                </Table.Body>
-              ))}
-            </Table>
-            {showMore && (
-              <button onClick={handleShowMore} className="w-full text-teal-500 self-center text-sm py-7">
-                Show more
-              </button>
-            )}
-          </>
-        ) : (
-          <p>You have no user yet!</p>
-        )}
-        <Modal show={showModal} onClose={() => setShowModal(false)} popup size="md">
-          <Modal.Header />
-          <Modal.Body>
-            <div className="text-center">
-              <HiOutlineExclamationCircle className="h-14 w-14 text-gray-400 dark:text-gray-200 mb-4 mx-auto" />
-              <h3 className="mb-5 text-lg text-gray-500 dark:text-gray-400">Are you sure you want to deleted this user ?</h3>
-              <div className="flex justify-center gap-4">
-                <Button color="failure" onClick={handleDeleteUser}>
-                  Yes, I'am sure
-                </Button>
-                <Button color="gray" onClick={() => setShowModal(false)}>
-                  No, cancel
-                </Button>
-              </div>
-            </div>
-          </Modal.Body>
-        </Modal>
-      </div>
+      {/* MODAL KONFIRMASI DELETE */}
+      <Modal show={showModal} size="md" onClose={() => setShowModal(false)}>
+        <Modal.Header>Konfirmasi Hapus</Modal.Header>
+        <Modal.Body>
+          <p className="text-gray-600">Apakah Anda yakin ingin menghapus pengguna ini?</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button color="failure" onClick={handleDelete}>
+            Ya, Hapus
+          </Button>
+          <Button color="gray" onClick={() => setShowModal(false)}>
+            Batal
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };
